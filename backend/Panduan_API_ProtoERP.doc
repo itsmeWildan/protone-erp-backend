@@ -1,0 +1,176 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta charset="utf-8">
+<title>API Documentation - ProtoERP</title>
+<style>
+    body { font-family: 'Calibri', 'Arial', sans-serif; font-size: 11pt; line-height: 1.5; color: #000000; }
+    h1 { font-size: 20pt; color: #2F5496; border-bottom: 1px solid #2F5496; padding-bottom: 5px; margin-bottom: 20px; }
+    h2 { font-size: 16pt; color: #2F5496; margin-top: 24pt; margin-bottom: 10pt; }
+    h3 { font-size: 13pt; color: #1F3864; margin-top: 16pt; margin-bottom: 4pt; }
+    p { margin-top: 0; margin-bottom: 10pt; }
+    .important-box { border: 1px solid #C00000; background-color: #FCE4D6; padding: 10pt; margin-bottom: 16pt; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16pt; margin-top: 6pt; }
+    th, td { border: 1px solid #8FAADC; padding: 6pt 8pt; text-align: left; vertical-align: top; }
+    th { background-color: #D9E1F2; color: #000000; font-weight: bold; }
+    .method { font-weight: bold; color: #C00000; }
+    .endpoint { font-family: 'Courier New', Courier, monospace; background-color: #F2F2F2; padding: 2px 4px; }
+</style>
+</head>
+<body>
+
+<h1>Buku Panduan Integrasi API ProtoERP</h1>
+<p>Dokumen ini berisi panduan teknis dan alur integrasi API ProtoERP. Dokumen ini dirancang untuk memudahkan tim Frontend dalam menghubungkan antarmuka pengguna (UI) dengan sistem Backend.</p>
+
+<div class="important-box">
+    <strong>CATATAN PENTING:</strong><br>
+    Hampir seluruh API (kecuali proses Registrasi dan Login) diwajibkan untuk menyertakan header otentikasi berupa: <br>
+    <span class="endpoint">Authorization: Bearer [TOKEN_ANDA]</span><br>
+    Token ini didapatkan dari respons API Login. Khusus untuk endpoint download PDF, token disisipkan melalui parameter URL (?token=...).
+</div>
+
+<h2>Tahap 1: Inisialisasi & Login (Wajib Pertama Kali)</h2>
+<p>Sebelum mengakses modul lain, sistem memerlukan kredensial penyewa (Tenant) dan token akses untuk mengenali siapa yang sedang melakukan permintaan.</p>
+
+<table>
+    <tr>
+        <th width="30%">Langkah</th>
+        <th width="70%">Endpoint & Fungsi</th>
+    </tr>
+    <tr>
+        <td><strong>1. Daftarkan Perusahaan</strong><br><em>(Registrasi Tenant)</em></td>
+        <td>
+            <span class="method">POST</span> <span class="endpoint">/api/v1/auth/register-tenant</span><br>
+            <strong>Fungsi:</strong> Membuat entitas perusahaan baru di dalam sistem. Response akan mengembalikan detail perusahaan beserta akun admin pertama.
+        </td>
+    </tr>
+    <tr>
+        <td><strong>2. Login & Dapatkan Token</strong><br><em>(Otentikasi)</em></td>
+        <td>
+            <span class="method">POST</span> <span class="endpoint">/api/v1/auth/login</span><br>
+            <strong>Fungsi:</strong> Digunakan untuk masuk menggunakan email dan password. Response API ini akan mengembalikan <strong>AccessToken</strong>. Harap simpan token ini (misalnya di LocalStorage) untuk digunakan pada seluruh panggilan API berikutnya.
+        </td>
+    </tr>
+</table>
+
+<h2>Tahap 2: Setup Data Master (Karyawan)</h2>
+<p>Modul absen, cuti, dan penggajian sangat bergantung pada data karyawan. Pastikan karyawan telah terdaftar sebelum menggunakan fitur operasional harian.</p>
+
+<table>
+    <tr>
+        <th width="30%">Langkah</th>
+        <th width="70%">Endpoint & Fungsi</th>
+    </tr>
+    <tr>
+        <td><strong>1. Buat Data Karyawan</strong><br><em>(Create Employee)</em></td>
+        <td>
+            <span class="method">POST</span> <span class="endpoint">/api/v1/employees</span><br>
+            <strong>Fungsi:</strong> Mendaftarkan staf atau karyawan baru. Response akan mengembalikan <strong>Employee ID</strong>. Catat ID ini jika Anda membutuhkan referensi spesifik untuk pengujian selanjutnya.
+        </td>
+    </tr>
+    <tr>
+        <td><strong>2. Lihat Daftar Karyawan</strong><br><em>(List Employees)</em></td>
+        <td>
+            <span class="method">GET</span> <span class="endpoint">/api/v1/employees</span><br>
+            <strong>Fungsi:</strong> Menampilkan seluruh karyawan yang terdaftar di perusahaan Anda. API ini berguna jika Anda perlu mencari ID karyawan tertentu untuk proses lain (misal: memberi jatah cuti).
+        </td>
+    </tr>
+</table>
+
+<h2>Tahap 3: Alur Kehadiran & Cuti (Operasional Harian)</h2>
+<p>Bagian ini mencakup rutinitas pencatatan jam kerja harian dan permohonan ketidakhadiran (cuti).</p>
+
+<table>
+    <tr>
+        <th width="30%">Langkah</th>
+        <th width="70%">Endpoint & Fungsi</th>
+    </tr>
+    <tr>
+        <td><strong>1. Absen Masuk & Pulang</strong><br><em>(Clock-In / Clock-Out)</em></td>
+        <td>
+            <span class="method">POST</span> <span class="endpoint">/api/v1/attendance/clock-in</span><br>
+            <span class="method">POST</span> <span class="endpoint">/api/v1/attendance/clock-out</span><br>
+            <strong>Fungsi:</strong> Mencatat waktu kehadiran. Sistem otomatis mengenali identitas karyawan dari token login yang disematkan pada header.
+        </td>
+    </tr>
+    <tr>
+        <td><strong>2. Berikan Jatah Cuti</strong><br><em>(Init Balance)</em></td>
+        <td>
+            <span class="method">POST</span> <span class="endpoint">/api/v1/leaves/init-balance</span><br>
+            <strong>Fungsi & Syarat:</strong> API ini membutuhkan input <strong>Employee ID</strong> (didapat dari GET /employees). API ini bertugas mengalokasikan saldo cuti tahunan (misal: 12 hari) kepada karyawan yang bersangkutan agar mereka bisa mengajukan cuti.
+        </td>
+    </tr>
+    <tr>
+        <td><strong>3. Ajukan & Setujui Cuti</strong><br><em>(Request & Approve)</em></td>
+        <td>
+            <span class="method">POST</span> <span class="endpoint">/api/v1/leaves/request</span><br>
+            <strong>Fungsi:</strong> Mengirim permohonan cuti baru. Response akan mengembalikan <strong>Leave ID</strong>.<br><br>
+            <span class="method">PATCH</span> <span class="endpoint">/api/v1/leaves/approve</span><br>
+            <strong>Fungsi:</strong> Manajer (dengan role yang berwenang) menggunakan <strong>Leave ID</strong> tersebut untuk menyetujui (Approve) permohonan cuti.
+        </td>
+    </tr>
+</table>
+
+<h2>Tahap 4: Alur Penggajian & Cetak Slip PDF (Siklus Bulanan)</h2>
+<p>Fitur penggajian dilakukan setiap bulan. PDF slip gaji hanya bisa diunduh apabila periode gaji bulan tersebut telah diproses oleh Admin/HR.</p>
+
+<table>
+    <tr>
+        <th width="30%">Langkah</th>
+        <th width="70%">Endpoint & Fungsi</th>
+    </tr>
+    <tr>
+        <td><strong>1. Proses Gaji Bulanan</strong><br><em>(Generate Payroll)</em></td>
+        <td>
+            <span class="method">POST</span> <span class="endpoint">/api/v1/payroll/generate</span><br>
+            <strong>Fungsi:</strong> Admin memicu kalkulasi gaji seluruh karyawan dengan mengirimkan parameter bulan (month) dan tahun (year). Response akan mengembalikan <strong>Period ID</strong> (ID Periode Penggajian).
+        </td>
+    </tr>
+    <tr>
+        <td><strong>2. Lihat Rincian Gaji</strong><br><em>(My Payslip)</em></td>
+        <td>
+            <span class="method">GET</span> <span class="endpoint">/api/v1/payroll/my-slip?month=5&year=2026</span><br>
+            <strong>Fungsi:</strong> Mengambil rincian JSON gaji karyawan yang login. Di dalam JSON responsenya, Anda akan menemukan field <strong>PayrollPeriodID</strong>. ID ini adalah kunci untuk mengunduh versi PDF.
+        </td>
+    </tr>
+    <tr>
+        <td><strong>3. Download PDF Slip Gaji</strong><br><em>(Cetak Dokumen)</em></td>
+        <td>
+            <span class="method">GET</span> <span class="endpoint">/api/v1/payroll/slips/{PayrollPeriodID}/download?token=TOKEN_ANDA</span><br>
+            <strong>Fungsi:</strong> Endpoint stream untuk mengunduh berkas PDF fisik. Ganti <code>{PayrollPeriodID}</code> dengan ID dari langkah 2. Karena proses ini biasanya menggunakan elemen <code>&lt;a href="..."&gt;</code> di browser yang tidak mengirimkan header otentikasi, Anda <strong>wajib</strong> menyematkan parameter <code>?token=...</code> pada URL tersebut.
+        </td>
+    </tr>
+</table>
+
+<h2>Tahap Tambahan: Lembur, Klaim, dan Anggaran</h2>
+<p>Ketiga modul ini memiliki karakteristik alur yang hampir sama dengan modul Cuti, yakni berbasis siklus Permohonan (Request) lalu Persetujuan (Approve) menggunakan ID referensi.</p>
+
+<table>
+    <tr>
+        <th width="30%">Modul</th>
+        <th width="70%">Alur Endpoint</th>
+    </tr>
+    <tr>
+        <td><strong>Reimbursement (Klaim)</strong></td>
+        <td>
+            1. <span class="method">POST</span> <span class="endpoint">/api/v1/reimbursements/submit</span> (Dapatkan Claim ID)<br>
+            2. <span class="method">PATCH</span> <span class="endpoint">/api/v1/reimbursements/approve</span> (Gunakan Claim ID)
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Overtime (Lembur)</strong></td>
+        <td>
+            1. <span class="method">POST</span> <span class="endpoint">/api/v1/overtime/request</span> (Dapatkan Overtime ID)<br>
+            2. <span class="method">PATCH</span> <span class="endpoint">/api/v1/overtime/approve</span> (Gunakan Overtime ID)
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Budget (Anggaran)</strong></td>
+        <td>
+            1. <span class="method">POST</span> <span class="endpoint">/api/v1/budgets/set</span> (Atur pagu anggaran)<br>
+            2. <span class="method">GET</span> <span class="endpoint">/api/v1/budgets/check</span> (Cek sisa anggaran)
+        </td>
+    </tr>
+</table>
+
+</body>
+</html>

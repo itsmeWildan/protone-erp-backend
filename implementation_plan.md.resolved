@@ -1,0 +1,236 @@
+# ProtoERP — Employee & Finance Management System
+## Implementation Plan (FINAL)
+
+> **Stack**: Go · React Native · PostgreSQL · Docker  
+> **Pattern**: Clean Architecture + Hexagonal + DDD (Pragmatic) + semi-CQRS  
+> **Mode**: Multi-Tenant · Mobile-first (React Native + Emulator)
+
+---
+
+## Architecture Decision Records (ADR)
+
+| Keputusan | Pilihan | Alasan |
+|---|---|---|
+| Frontend | React Native (Expo) | Native mobile, emulator-ready |
+| Multi-tenant | `tenant_id` column + Row-Level Security | Simpel, scalable, tidak perlu DB per tenant |
+| Finance scope sekarang | Payroll + Reimbursement + Budget | MVP dulu |
+| Finance scope masa depan | Full GL (double-entry), AP, AR | Dipreparasi via COA + Journal table dari awal |
+| HTTP Router | `chi` atau `echo` | Lightweight, idiomatic Go |
+| ORM / Query | `sqlx` + raw SQL | Tidak pakai ORM di domain, sesuai prinsip |
+| Migration | `golang-migrate` | Battle-tested, supports PostgreSQL |
+| Validation | `go-playground/validator` | Standard di Go ecosystem |
+| JWT | `golang-jwt/jwt/v5` | Standard JWT |
+
+---
+
+## Multi-Tenant Design
+
+Setiap tabel utama memiliki `tenant_id UUID NOT NULL` yang di-inject via middleware setelah JWT decode.
+
+```
+Request → JWT Middleware (extract tenant_id + user_id) → Context → UseCase → Repository (filter by tenant_id)
+```
+
+```sql
+-- Contoh: tabel employees
+CREATE TABLE employees (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES tenants(id),
+    nik         VARCHAR(50) NOT NULL,
+    full_name   VARCHAR(255) NOT NULL,
+    ...
+    UNIQUE(tenant_id, nik)
+);
+```
+
+---
+
+## GL/AP/AR Extensibility (Dipersiapkan dari Awal)
+
+Tabel `chart_of_accounts` (COA), `journal_entries`, dan `journal_lines` dibuat dari **Phase 1** meski belum dipakai UI.  
+Payroll dan Reimbursement akan auto-post ke journal saat Phase 4+.
+
+```
+Payroll Generated → journal_entries (debit: Beban Gaji, kredit: Hutang Gaji)
+Reimbursement Approved → journal_entries (debit: Beban, kredit: Kas/Bank)
+```
+
+---
+
+## Final Project Structure
+
+```
+E:\PROTONE\
+├── backend/                          # Go API
+│   ├── cmd/api/main.go
+│   ├── config/config.go
+│   ├── internal/
+│   │   ├── domain/                   # Pure Go — no framework
+│   │   │   ├── tenant/
+│   │   │   ├── employee/
+│   │   │   ├── department/
+│   │   │   ├── position/
+│   │   │   ├── leave/
+│   │   │   ├── attendance/
+│   │   │   ├── payroll/
+│   │   │   ├── reimbursement/
+│   │   │   ├── budget/
+│   │   │   └── finance/              # COA, Journal (GL ready)
+│   │   ├── usecase/
+│   │   │   ├── auth/
+│   │   │   ├── employee/
+│   │   │   │   ├── command/          # CreateEmployee, UpdateEmployee
+│   │   │   │   └── query/            # ListEmployee, GetEmployee
+│   │   │   ├── leave/
+│   │   │   │   ├── command/          # SubmitLeave, ApproveLeave, RejectLeave
+│   │   │   │   └── query/
+│   │   │   ├── payroll/
+│   │   │   └── budget/
+│   │   ├── delivery/
+│   │   │   └── http/
+│   │   │       ├── router.go
+│   │   │       ├── middleware/
+│   │   │       │   ├── auth.go       # JWT parse → ctx tenant_id, user_id
+│   │   │       │   ├── tenant.go     # inject tenant context
+│   │   │       │   └── rbac.go
+│   │   │       └── handler/
+│   │   │           ├── auth_handler.go
+│   │   │           ├── employee_handler.go
+│   │   │           ├── leave_handler.go
+│   │   │           ├── payroll_handler.go
+│   │   │           └── budget_handler.go
+│   │   └── infrastructure/
+│   │       ├── persistence/
+│   │       │   ├── postgres/
+│   │       │   │   ├── db.go         # pgxpool setup
+│   │       │   │   ├── tx.go         # TxManager
+│   │       │   │   ├── employee_repo.go
+│   │       │   │   ├── leave_repo.go
+│   │       │   │   ├── payroll_repo.go
+│   │       │   │   └── budget_repo.go
+│   │       │   └── migrations/
+│   │       │       ├── 000001_create_tenants.up.sql
+│   │       │       ├── 000002_create_departments.up.sql
+│   │       │       ├── 000003_create_positions.up.sql
+│   │       │       ├── 000004_create_employees.up.sql
+│   │       │       ├── 000005_create_leave_types.up.sql
+│   │       │       ├── 000006_create_leaves.up.sql
+│   │       │       ├── 000007_create_attendance.up.sql
+│   │       │       ├── 000008_create_payroll.up.sql
+│   │       │       ├── 000009_create_reimbursements.up.sql
+│   │       │       ├── 000010_create_budgets.up.sql
+│   │       │       ├── 000011_create_chart_of_accounts.up.sql  ← GL prep
+│   │       │       └── 000012_create_journal_entries.up.sql    ← GL prep
+│   │       └── email/
+│   ├── pkg/
+│   │   ├── response/response.go      # standard JSON: {status, message, data}
+│   │   ├── jwt/jwt.go
+│   │   ├── validator/validator.go
+│   │   └── pagination/pagination.go
+│   ├── .env
+│   ├── .env.example
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   └── go.mod
+│
+└── mobile/                           # React Native (Expo)
+    ├── src/
+    │   ├── app/                      # Expo Router (file-based routing)
+    │   ├── features/
+    │   │   ├── auth/
+    │   │   ├── employee/
+    │   │   ├── leave/
+    │   │   ├── payroll/
+    │   │   └── finance/
+    │   ├── shared/
+    │   │   ├── components/
+    │   │   ├── hooks/
+    │   │   ├── api/                  # axios + API clients
+    │   │   └── utils/
+    │   └── constants/
+    ├── app.json
+    └── package.json
+```
+
+---
+
+## Phase Roadmap
+
+| Phase | Deliverable | Est. |
+|---|---|---|
+| **Phase 1** ← MULAI SINI | Scaffold + DB migrations + Auth (JWT) multi-tenant + Employee CRUD | Sekarang |
+| **Phase 2** | Leave Management (submit → approve → balance) | Minggu 3 |
+| **Phase 3** | Attendance + Overtime | Minggu 4-5 |
+| **Phase 4** | Payroll generation + Reimbursement | Minggu 5-7 |
+| **Phase 5** | Budget tracking | Minggu 7-8 |
+| **Phase 6** | React Native UI (semua modul) | Minggu 8-11 |
+| **Phase 7** | GL/AP/AR activation + Docker CI/CD | Minggu 11-13 |
+
+---
+
+## Phase 1 — Step by Step Execution
+
+### Step 1: Go module init + folder scaffold
+```
+go mod init github.com/protone/erp
+```
+
+### Step 2: docker-compose.yml (PostgreSQL + pgAdmin)
+
+### Step 3: Database migrations (semua tabel termasuk COA/Journal kosong)
+
+### Step 4: Domain entities
+- `tenant`, `employee`, `department`, `position`
+- Factory pattern `New*()`, behavior methods
+
+### Step 5: Repository interfaces (ports)
+- Write: `Repository` interface
+- Read: `QueryRepository` interface (semi-CQRS)
+
+### Step 6: Infrastructure adapters
+- `pgxpool` connection
+- `TxManager` abstraction
+- Implementasi repository untuk employee
+
+### Step 7: UseCase layer
+- `CreateEmployee`, `UpdateEmployee`, `DeleteEmployee` (command)
+- `ListEmployees`, `GetEmployeeByID` (query)
+
+### Step 8: HTTP Delivery layer
+- Router setup (Echo)
+- JWT middleware (inject tenant_id + user_id ke context)
+- `EmployeeHandler` — CRUD endpoints
+
+### Step 9: Auth module
+- Register Tenant + Admin
+- Login → JWT access token + refresh token
+
+### Step 10: Testing via Postman / Bruno
+- Register tenant → Login → CRUD Employee
+
+---
+
+## Standard API Response (pkg/response)
+
+```json
+{
+  "status": "success",
+  "message": "Data berhasil diambil",
+  "data": { ... },
+  "meta": {
+    "page": 1,
+    "per_page": 20,
+    "total": 150
+  }
+}
+```
+
+---
+
+## Verification Plan
+
+- `go test ./internal/domain/...` — unit test semua entity
+- Integration test via `testcontainers-go` 
+- Postman collection untuk end-to-end API test
+- React Native di Android Emulator (AVD) atau Expo Go
+
