@@ -1,0 +1,28 @@
+# Binaries
+bin/
+backend/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.msi
+
+# Environment variables
+.env
+backend/.env
+
+# Dependencies
+vendor/
+node_modules/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
