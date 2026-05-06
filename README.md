@@ -1,6 +1,6 @@
-# ProtoERP Backend
+# PROTONE ERP Backend
 
-ProtoERP adalah sistem Enterprise Resource Planning (ERP) berbasis **Go (Golang)** yang dirancang dengan **Clean Architecture** dan prinsip **Domain-Driven Design (DDD)**. Backend ini menangani seluruh logika bisnis inti untuk manajemen sumber daya manusia (HR) dan keuangan.
+PROTONE ERP adalah sistem Enterprise Resource Planning (ERP) berbasis **Go (Golang)** yang dirancang dengan **Clean Architecture** dan prinsip **Domain-Driven Design (DDD)**. Backend ini menangani seluruh logika bisnis inti untuk manajemen sumber daya manusia (HR) dan keuangan.
 
 ## 🚀 Fitur Utama
 
