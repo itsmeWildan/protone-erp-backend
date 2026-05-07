@@ -74,24 +74,18 @@ go run cmd/api/main.go
 You can test the APIs using Postman or HTTPie. API collections are available in the docs/ folder (optional).
 
 
-# ProtoERP Backend
-
-REST API untuk Employee & Finance Management System.
-
-**Stack**: Go · chi · pgx · PostgreSQL · JWT
-
 ## Prerequisites
 
 - Go 1.22+
 - Docker & Docker Compose
-- `golang-migrate` CLI (untuk jalankan migrations)
+- `golang-migrate` CLI (to run migrations)
 
 ## Quick Start
 
 ### 1. Install Go
-Download dari https://go.dev/dl/ (minimal v1.22)
+Download from https://go.dev/dl/ (minimum v1.22)
 
-### 2. Jalankan PostgreSQL via Docker
+### 2. Run PostgreSQL via Docker
 ```bash
 docker compose up -d
 ```
@@ -99,7 +93,7 @@ docker compose up -d
 ### 3. Copy environment config
 ```bash
 cp .env.example .env
-# Edit .env sesuai kebutuhan
+# Edit .env according to your local setup
 ```
 
 ### 4. Install golang-migrate
@@ -107,11 +101,11 @@ cp .env.example .env
 # Windows (via scoop)
 scoop install migrate
 
-# Atau download langsung dari:
+# Or download directly from:
 # https://github.com/golang-migrate/migrate/releases
 ```
 
-### 5. Jalankan migrasi database
+### 5. Run Database Migrations
 ```bash
 migrate -path internal/infrastructure/persistence/migrations \
         -database "postgres://postgres:postgres@localhost:5432/protone_erp?sslmode=disable" \
@@ -123,14 +117,14 @@ migrate -path internal/infrastructure/persistence/migrations \
 go mod tidy
 ```
 
-### 7. Jalankan API server
+### 7. Run API Server
 ```bash
 go run ./cmd/api
 ```
 
-API akan berjalan di http://localhost:8080
+The API will be running at http://localhost:8080
 
-## Struktur Folder
+## Folder Structure
 
 ```
 backend/
