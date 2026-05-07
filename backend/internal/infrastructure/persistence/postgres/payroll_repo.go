@@ -82,7 +82,27 @@ func (r *payrollRepo) UpdatePeriodStatus(ctx context.Context, id uuid.UUID, stat
 }
 
 func (r *payrollRepo) GetSlipsByPeriod(ctx context.Context, periodID uuid.UUID) ([]payroll.PayrollSlip, error) {
-	return []payroll.PayrollSlip{}, nil
+	query := `SELECT id, tenant_id, payroll_period_id, employee_id, basic_salary, total_allowance, total_deduction, net_salary, working_days, present_days, overtime_hours, overtime_amount, created_at, updated_at 
+	          FROM payroll_slips WHERE payroll_period_id = $1`
+	
+	rows, err := r.pool.Query(ctx, query, periodID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []payroll.PayrollSlip
+	for rows.Next() {
+		var s payroll.PayrollSlip
+		err := rows.Scan(
+			&s.ID, &s.TenantID, &s.PayrollPeriodID, &s.EmployeeID, &s.BasicSalary, &s.TotalAllowance, &s.TotalDeduction, &s.NetSalary, &s.WorkingDays, &s.PresentDays, &s.OvertimeHours, &s.OvertimeAmount, &s.CreatedAt, &s.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, s)
+	}
+	return result, nil
 }
 
 func (r *payrollRepo) GetSlipByEmployee(ctx context.Context, periodID, employeeID uuid.UUID) (*payroll.PayrollSlip, error) {

@@ -100,6 +100,7 @@ func GetTenantID(ctx context.Context) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return id, true
+
 }
 
 func GetUserID(ctx context.Context) (uuid.UUID, bool) {

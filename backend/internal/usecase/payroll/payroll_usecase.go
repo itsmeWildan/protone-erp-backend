@@ -177,31 +177,45 @@ func (uc *PayrollUseCase) PayPayroll(ctx context.Context, tenantID uuid.UUID, mo
 	}
 
 	// 2. BUDGET & FINANCE INTEGRATION
-	// Fetch all slips to deduct budgets per department
+	// Group totals by department first for efficiency
+	deptTotals := make(map[uuid.UUID]float64)
 	slips, err := uc.payrollRepo.GetSlipsByPeriod(ctx, period.ID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to fetch slips for payment: %w", err)
 	}
 
 	for _, slip := range slips {
-		emp, _ := uc.employeeRepo.FindByID(ctx, tenantID, slip.EmployeeID)
-		if emp != nil && emp.DepartmentID != uuid.Nil {
-			budget, _ := uc.financeRepo.GetBudget(ctx, tenantID, emp.DepartmentID, month, year)
-			if budget != nil {
-				if err := budget.Deduct(slip.NetSalary); err != nil {
-					return fmt.Errorf("budget error for department %s: %v", emp.DepartmentID.String(), err)
-				}
-				_ = uc.financeRepo.UpdateBudget(ctx, budget)
+		emp, err := uc.employeeRepo.FindByID(ctx, tenantID, slip.EmployeeID)
+		if err == nil && emp != nil && emp.DepartmentID != uuid.Nil {
+			deptTotals[emp.DepartmentID] += slip.NetSalary
+		}
+	}
+
+	// Update budgets once per department
+	for deptID, amount := range deptTotals {
+		budget, err := uc.financeRepo.GetBudget(ctx, tenantID, deptID, month, year)
+		if err != nil {
+			continue
+		}
+		if budget != nil {
+			if err := budget.Deduct(amount); err != nil {
+				return fmt.Errorf("budget limit exceeded for department %s: %v", deptID, err)
+			}
+			if err := uc.financeRepo.UpdateBudget(ctx, budget); err != nil {
+				return fmt.Errorf("failed to update budget for department %s: %w", deptID, err)
 			}
 		}
 	}
 
 	// 3. Create Journal Entry
-	expenseAcc, _ := uc.financeRepo.GetCOAByCode(ctx, tenantID, "5-1001") // Beban Gaji
-	cashAcc, _ := uc.financeRepo.GetCOAByCode(ctx, tenantID, "1-1001")    // Kas/Bank
+	expenseAcc, err := uc.financeRepo.GetCOAByCode(ctx, tenantID, "5-1001") // Beban Gaji
+	if err != nil || expenseAcc == nil {
+		return fmt.Errorf("expense account (5-1001) not configured properly")
+	}
 
-	if expenseAcc == nil || cashAcc == nil {
-		return fmt.Errorf("accounting COA not configured properly")
+	cashAcc, err := uc.financeRepo.GetCOAByCode(ctx, tenantID, "1-1001") // Kas/Bank
+	if err != nil || cashAcc == nil {
+		return fmt.Errorf("cash/bank account (1-1001) not configured properly")
 	}
 
 	journal := &finance.JournalEntry{
@@ -209,18 +223,22 @@ func (uc *PayrollUseCase) PayPayroll(ctx context.Context, tenantID uuid.UUID, mo
 		TenantID:    tenantID,
 		JournalNo:   fmt.Sprintf("PYRL/%d/%d/%s", year, month, uuid.NewString()[:8]),
 		Date:        time.Now(),
-		Description: fmt.Sprintf("Payroll Payment - %d/%d", month, year),
+		Description: fmt.Sprintf("Payroll Payment - %02d/%d", month, year),
 		Status:      finance.StatusPosted,
 		SourceType:  "payroll",
 		SourceID:    &period.ID,
 	}
 
 	// Debet: Beban Gaji
-	journal.AddLine(expenseAcc.ID, "Payment of salaries", period.TotalAmount, 0)
+	journal.AddLine(expenseAcc.ID, fmt.Sprintf("Salaries Payment %02d/%d", month, year), period.TotalAmount, 0)
 	// Kredit: Kas/Bank
-	journal.AddLine(cashAcc.ID, "Payment of salaries", 0, period.TotalAmount)
+	journal.AddLine(cashAcc.ID, fmt.Sprintf("Salaries Payment %02d/%d", month, year), 0, period.TotalAmount)
 
-	return uc.financeRepo.CreateJournal(ctx, journal)
+	if err := uc.financeRepo.CreateJournal(ctx, journal); err != nil {
+		return fmt.Errorf("failed to create accounting journal: %w", err)
+	}
+
+	return nil
 }
 
 func (uc *PayrollUseCase) GetSlipPDF(ctx context.Context, tenantID, employeeID, periodID uuid.UUID) (io.Reader, error) {

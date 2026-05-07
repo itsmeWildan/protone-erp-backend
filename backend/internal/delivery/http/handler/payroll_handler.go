@@ -105,10 +105,19 @@ func (h *PayrollHandler) Pay(w http.ResponseWriter, r *http.Request) {
 
 func (h *PayrollHandler) DownloadSlip(w http.ResponseWriter, r *http.Request) {
 	slipIDStr := chi.URLParam(r, "id")
-	periodID, _ := uuid.Parse(slipIDStr) // Asumsi ID yang dikirim adalah PeriodID untuk tes cepat
+	periodID, _ := uuid.Parse(slipIDStr)
 
 	tenantID, _ := middleware.GetTenantID(r.Context())
 	userID, _ := middleware.GetUserID(r.Context())
+
+	// Fallback untuk testing browser: ambil dari query ?token=
+	if tenantID == uuid.Nil {
+		tokenStr := r.URL.Query().Get("token")
+		if tokenStr != "" {
+			// (Logika parsing token sementara untuk mempermudah tes)
+			// Untuk sekarang kita asumsikan jika token ada, kita pakai data context
+		}
+	}
 	
 	pdfReader, err := h.usecase.DownloadMySlipPDF(r.Context(), tenantID, userID, periodID)
 	if err != nil {
